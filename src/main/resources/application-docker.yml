@@ -77,3 +77,9 @@ user-settings:
     # 推流直播是否录制
     record-push-live: true
     auto-apply-play: true
+    # 是否信任 PLS 签发的 token，启用后 PLS token 可等价于 WVP admin token
+    pls-token-trust: true
+    # PLS token 密钥，需与 PLS application.yml token.secret 保持一致
+    pls-token-secret: ${USER_SETTINGS_PLS_TOKEN_SECRET:abcdefghijklmnopqrstuvwxyz}
+    # PLS token 映射到的 WVP admin 角色名
+    pls-token-admin-role: admin

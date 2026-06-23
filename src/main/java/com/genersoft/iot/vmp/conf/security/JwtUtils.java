@@ -281,7 +281,40 @@ public class JwtUtils implements InitializingBean {
     }
 
     public static JwtUser verifyToken(String token) {
+        JwtUser jwtUser = verifyRsaToken(token);
+        if (jwtUser.getStatus() == JwtUser.TokenStatus.NORMAL || jwtUser.getStatus() == JwtUser.TokenStatus.EXPIRING_SOON) {
+            return jwtUser;
+        }
 
+        // RS256 校验未通过，回退尝试 PLS HS512 token
+        if (userSetting != null && Boolean.TRUE.equals(userSetting.getPlsTokenTrust())) {
+            JwtUser plsUser = PlsTokenVerifier.verify(token, userSetting.getPlsTokenSecret());
+            if (plsUser != null && plsUser.getStatus() == JwtUser.TokenStatus.NORMAL) {
+                plsUser.setRoleId(1);
+                String adminUsername = userSetting.getPlsTokenAdminRole();
+                if (adminUsername == null || adminUsername.isEmpty()) {
+                    adminUsername = "admin";
+                }
+                try {
+                    User adminUser = userService.getUserByUsername(adminUsername);
+                    if (adminUser != null) {
+                        plsUser.setUserName(adminUser.getUsername());
+                        plsUser.setPassword(adminUser.getPassword());
+                        plsUser.setUserId(adminUser.getId());
+                    } else {
+                        log.warn("[PLS-AUTH] 未找到 WVP admin 用户：{}，使用 PLS token 中的用户名", adminUsername);
+                    }
+                } catch (Exception e) {
+                    log.debug("[PLS-AUTH] 查询 WVP admin 用户失败：{}", e.getMessage());
+                }
+                return plsUser;
+            }
+        }
+
+        return jwtUser;
+    }
+
+    private static JwtUser verifyRsaToken(String token) {
         JwtUser jwtUser = new JwtUser();
 
         try {

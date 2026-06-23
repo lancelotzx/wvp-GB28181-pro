@@ -256,4 +256,19 @@ public class UserSetting {
      */
     private int alarmKeepDays = 7;
 
+    /**
+     * 是否信任 PLS 签发的 token
+     */
+    private Boolean plsTokenTrust = Boolean.FALSE;
+
+    /**
+     * PLS token 密钥（与 PLS application.yml token.secret 保持一致）
+     */
+    private String plsTokenSecret = "";
+
+    /**
+     * PLS token 映射到的 WVP admin 角色名
+     */
+    private String plsTokenAdminRole = "admin";
+
 }
