@@ -1,0 +1,19 @@
+services:
+  wvp:
+    image: wvp-pro-standalone:${WVP_TAG:-latest}
+    container_name: wvp
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      JAVA_OPTS: "-Xms512m -Xmx2g -Dfile.encoding=UTF-8"
+      TZ: Asia/Shanghai
+      WVP_CONF: /app/conf/application-dev.yml
+    volumes:
+      - ${WVP_CONF_DIR:-./conf}:/app/conf:ro
+      - ${WVP_LOG_DIR:-./logs}:/app/logs
+    healthcheck:
+      test: ["CMD", "sh", "-c", "ss -lntu | grep -qE ':(8116|18978)' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
