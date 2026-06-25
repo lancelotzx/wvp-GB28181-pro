@@ -418,7 +418,8 @@ public class RtpServerServiceImpl implements IReceiveRtpServerService {
              String newKey = String.format("%s:%s", VideoManagerConstants.RTP_AUTHENTICATE, newStreamId);
              redisTemplate.opsForValue().set(newKey, obj);
              redisTemplate.expire(newKey, 60, TimeUnit.SECONDS);
-             redisTemplate.delete(oldKey);
+             /* ZLM 那边可能仍按 oldStreamId 回调 on_publish, 保留 oldKey 让其 60s 自然过期 */
+             redisTemplate.expire(oldKey, 60, TimeUnit.SECONDS);
              log.info("[刷新RTP鉴权信息] {} -> {}", oldStreamId, newStreamId);
          } else {
              log.warn("[刷新RTP鉴权信息] 未找到旧key: {}", oldKey);
