@@ -8,6 +8,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 /**
@@ -28,10 +29,13 @@ public class PlsTokenVerifier {
      * @return 校验通过返回 NORMAL 状态的 JwtUser；失败返回 null
      */
     public static JwtUser verify(String token, String secret) {
+        log.debug("[PLS-AUTH] 收到 token, len={}, preview={}", token == null ? 0 : token.length(), maskMiddle(token));
         if (secret == null || secret.isEmpty()) {
             log.debug("[PLS-AUTH] PLS token trust enabled but secret is empty");
             return null;
         }
+        log.debug("[PLS-AUTH] 使用 secret, len={}, preview={}, sha256_8={}",
+                secret.length(), maskMiddle(secret), hashPrefix(secret.getBytes(StandardCharsets.UTF_8)));
         if (token == null || token.isEmpty()) {
             return null;
         }
@@ -42,6 +46,7 @@ public class PlsTokenVerifier {
         }
         try {
             byte[] key = deriveKey(secret);
+            log.debug("[PLS-AUTH] 解出 key, bytes={}, sha256_8={}", key.length, hashPrefix(key));
             String signingInput = parts[0] + "." + parts[1];
 
             Mac mac = Mac.getInstance(ALGORITHM);
@@ -49,6 +54,8 @@ public class PlsTokenVerifier {
             byte[] computed = mac.doFinal(signingInput.getBytes(StandardCharsets.UTF_8));
 
             byte[] signature = Base64.getUrlDecoder().decode(parts[2]);
+            log.debug("[PLS-AUTH] 签名比对, computed_sha256_8={}, token_sha256_8={}",
+                    hashPrefix(computed), hashPrefix(signature));
             if (!constantTimeEquals(computed, signature)) {
                 log.debug("[PLS-AUTH] PLS token signature mismatch");
                 return null;
@@ -65,6 +72,7 @@ public class PlsTokenVerifier {
             if (username == null || username.isEmpty()) {
                 username = "pls-admin";
             }
+            log.debug("[PLS-AUTH] 验签通过, username={}", username);
 
             JwtUser jwtUser = new JwtUser();
             jwtUser.setStatus(JwtUser.TokenStatus.NORMAL);
@@ -90,5 +98,36 @@ public class PlsTokenVerifier {
 
     private static boolean constantTimeEquals(byte[] a, byte[] b) {
         return MessageDigest.isEqual(a, b);
+    }
+
+    /**
+     * 掩码预览：首尾各留 3 位，中间替换成 *，避免明文落盘。
+     */
+    private static String maskMiddle(String s) {
+        if (s == null) {
+            return "null";
+        }
+        int len = s.length();
+        if (len <= 6) {
+            return "*".repeat(len);
+        }
+        return s.substring(0, 3) + "*".repeat(len - 6) + s.substring(len - 3);
+    }
+
+    /**
+     * SHA-256 前 8 位 hex，用于跨系统比对是否为同一份原文，而不暴露原文。
+     */
+    private static String hashPrefix(byte[] data) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(data);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 4; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "n/a";
+        }
     }
 }
