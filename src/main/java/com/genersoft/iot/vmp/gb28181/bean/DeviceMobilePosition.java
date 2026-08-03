@@ -24,7 +24,7 @@ import static com.genersoft.iot.vmp.gb28181.utils.XmlUtil.getText;
 public class DeviceMobilePosition extends MobilePosition{
 
     /**
-     * 通道数据库自增Id
+     * 通道国标编号
      */
     private String channelDeviceId;
 
@@ -33,56 +33,100 @@ public class DeviceMobilePosition extends MobilePosition{
 
 
     public static List<DeviceMobilePosition> decode(Device device, Element rootElementAfterCharset) {
-
         List<DeviceMobilePosition> mobilePositions = new ArrayList<>();
+        if (rootElementAfterCharset == null) {
+            return mobilePositions;
+        }
+
+        // 执法记录仪等设备常把坐标放在 GpsItemList/Item 下，而不是 Notify 根节点
+        Element gpsItemList = rootElementAfterCharset.element("GpsItemList");
+        if (gpsItemList != null) {
+            List<Element> items = gpsItemList.elements("Item");
+            if (items != null && !items.isEmpty()) {
+                for (Element item : items) {
+                    DeviceMobilePosition position = decodeFromElement(device, item);
+                    if (position != null) {
+                        mobilePositions.add(position);
+                    }
+                }
+                return mobilePositions;
+            }
+        }
+
+        DeviceMobilePosition mobilePosition = decodeFromElement(device, rootElementAfterCharset);
+        if (mobilePosition != null) {
+            mobilePositions.add(mobilePosition);
+        }
+        return mobilePositions;
+    }
+
+    private static DeviceMobilePosition decodeFromElement(Device device, Element element) {
+        if (element == null) {
+            return null;
+        }
+
+        String longitudeText = getText(element, "Longitude");
+        String latitudeText = getText(element, "Latitude");
+        if (ObjectUtils.isEmpty(longitudeText) || ObjectUtils.isEmpty(latitudeText)) {
+            log.warn("移动位置缺少经纬度字段, device={}",
+                    device != null ? device.getDeviceId() : null);
+            return null;
+        }
 
         DeviceMobilePosition mobilePosition = new DeviceMobilePosition();
         mobilePosition.setCreateTime(DateUtil.getNow());
         mobilePosition.setDevice(device);
 
-        String channelId = getText(rootElementAfterCharset, "DeviceID");
-
+        String channelId = getText(element, "DeviceID");
         mobilePosition.setChannelDeviceId(channelId);
-        String time = getText(rootElementAfterCharset, "Time");
-        if (ObjectUtils.isEmpty(time)){
+
+        String time = getText(element, "Time");
+        if (ObjectUtils.isEmpty(time)) {
             mobilePosition.setTimestamp(System.currentTimeMillis());
-        }else {
+        } else {
             Long timestamp = SipUtils.parseTimeForTimestamp(time);
-            if(timestamp == null) {
+            if (timestamp == null) {
                 log.warn("解析移动位置时间失败：{}， 使用当前时间", time);
                 mobilePosition.setTimestamp(System.currentTimeMillis());
-            }else {
+            } else {
                 mobilePosition.setTimestamp(timestamp);
             }
         }
-        mobilePosition.setLongitude(Double.parseDouble(getText(rootElementAfterCharset, "Longitude")));
-        mobilePosition.setLatitude(Double.parseDouble(getText(rootElementAfterCharset, "Latitude")));
-        if (NumericUtil.isDouble(getText(rootElementAfterCharset, "Speed"))) {
-            mobilePosition.setSpeed(Double.parseDouble(getText(rootElementAfterCharset, "Speed")));
+
+        try {
+            mobilePosition.setLongitude(Double.parseDouble(longitudeText));
+            mobilePosition.setLatitude(Double.parseDouble(latitudeText));
+        } catch (NumberFormatException e) {
+            log.warn("移动位置经纬度无法解析: lon={}, lat={}, device={}",
+                    longitudeText, latitudeText,
+                    device != null ? device.getDeviceId() : null);
+            return null;
+        }
+
+        if (NumericUtil.isDouble(getText(element, "Speed"))) {
+            mobilePosition.setSpeed(Double.parseDouble(getText(element, "Speed")));
         } else {
             mobilePosition.setSpeed(0.0);
         }
-        if (NumericUtil.isDouble(getText(rootElementAfterCharset, "Direction"))) {
-            mobilePosition.setDirection(Double.parseDouble(getText(rootElementAfterCharset, "Direction")));
+        if (NumericUtil.isDouble(getText(element, "Direction"))) {
+            mobilePosition.setDirection(Double.parseDouble(getText(element, "Direction")));
         } else {
             mobilePosition.setDirection(0.0);
         }
-        if (NumericUtil.isDouble(getText(rootElementAfterCharset, "Altitude"))) {
-            mobilePosition.setAltitude(Double.parseDouble(getText(rootElementAfterCharset, "Altitude")));
+        if (NumericUtil.isDouble(getText(element, "Altitude"))) {
+            mobilePosition.setAltitude(Double.parseDouble(getText(element, "Altitude")));
         } else {
             mobilePosition.setAltitude(0.0);
         }
 
-        mobilePositions.add(mobilePosition);
-
-        return mobilePositions;
+        return mobilePosition;
     }
 
     @Override
     public String toString() {
         return "DeviceMobilePosition{" +
                 "channelDeviceId='" + channelDeviceId + '\'' +
-                ", deviceId='" + device.getDeviceId() + '\'' +
+                ", deviceId='" + (device != null ? device.getDeviceId() : null) + '\'' +
                 "} " + super.toString();
     }
 }
